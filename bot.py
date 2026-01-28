@@ -19,8 +19,7 @@ dp = Dispatcher()
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer("Привет! Я бот для учета финансов (v2.0 - CI/CD works!). Напиши трату, например: 
-'15 евро кофе'.")
+    await message.answer("Привет! Я бот для учета финансов (v2.0 - CI/CD works!).\n Напиши трату, например: '15 евро кофе'.")
 
 @dp.message(F.text)
 async def process_text(message: types.Message):
