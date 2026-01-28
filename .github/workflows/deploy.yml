@@ -1,0 +1,57 @@
+name: CI/CD Pipeline
+
+# Триггер: запускать только когда пушим в ветку main
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Скачиваем код репозитория
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. Логинимся в Docker Hub
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # 3. Собираем образ и пушим его (Build & Push)
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/finance-bot:latest
+
+  deploy:
+    needs: build-and-push # Ждем, пока образ соберется
+    runs-on: ubuntu-latest
+    steps:
+      # 4. Подключаемся к серверу по SSH и обновляем
+      - name: Deploy to Hetzner
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd finance-bot
+            # Останавливаем бота
+            docker compose down bot
+            # Удаляем старый образ, чтобы скачать новый
+            docker rmi ${{ secrets.DOCKER_USERNAME }}/finance-bot:latest || true
+            # Просто запускаем - он сам скачает новый образ, т.к. мы прописали его в конфиге
+            # НО! Нам нужно сначала обновить docker-compose.yml на сервере.
+            # Самый простой способ для начала - скачать его curl-ом прямо из гитхаба 
+            # (если репо публичный) или просто рассчитывать, что мы его обновим руками один раз.
+            
+            # ДАВАЙ СДЕЛАЕМ ПРОСТО: Pull и Up
+            docker pull ${{ secrets.DOCKER_USERNAME }}/finance-bot:latest
+            docker compose up -d bot
+            # Чистим мусор (старые образы)
+            docker image prune -f
