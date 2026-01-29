@@ -55,18 +55,3 @@ deploy:
             docker pull ${{ secrets.DOCKER_USERNAME }}/finance-bot:latest
             docker compose up -d
             docker image prune -f
-
-      # 4. Подключаемся к серверу по SSH и обновляем
-      - name: Deploy to Hetzner
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            cd finance-bot
-	    docker pull ${{ secrets.DOCKER_USERNAME }}/finance-bot:latest
-            # Просто запускаем - он сам скачает новый образ, т.к. мы прописали его в конфиге
-            docker compose up -d
-            # Чистим мусор (старые образы)
-            docker image prune -f
