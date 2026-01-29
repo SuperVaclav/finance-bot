@@ -32,6 +32,16 @@ jobs:
     needs: build-and-push # Ждем, пока образ соберется
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: - name: Copy config file via SSH
+        uses: appleboy/scp-action@master
+        with:
+	  host: {{ secrets.HOST }}
+	  username: {{ secrets.SSH_USERNAME }}
+	  key: {{ secrets.SSH_KEY }}
+	  source: "docker-compose.yml" # Что копируем
+	  target: "finance-bot"        # Куда (папка на сервере)
       # 4. Подключаемся к серверу по SSH и обновляем
       - name: Deploy to Hetzner
         uses: appleboy/ssh-action@master
@@ -41,17 +51,8 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             cd finance-bot
-            # Останавливаем бота
-            docker compose down bot
-            # Удаляем старый образ, чтобы скачать новый
-            docker rmi ${{ secrets.DOCKER_USERNAME }}/finance-bot:latest || true
+	    docker pull ${{ secrets.DOCKER_USERNAME }}/finance-bot:latest
             # Просто запускаем - он сам скачает новый образ, т.к. мы прописали его в конфиге
-            # НО! Нам нужно сначала обновить docker-compose.yml на сервере.
-            # Самый простой способ для начала - скачать его curl-ом прямо из гитхаба 
-            # (если репо публичный) или просто рассчитывать, что мы его обновим руками один раз.
-            
-            # ДАВАЙ СДЕЛАЕМ ПРОСТО: Pull и Up
-            docker pull ${{ secrets.DOCKER_USERNAME }}/finance-bot:latest
             docker compose up -d
             # Чистим мусор (старые образы)
             docker image prune -f
