@@ -28,20 +28,34 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/finance-bot:latest
 
-  deploy:
-    needs: build-and-push # Ждем, пока образ соберется
+deploy:
+    needs: build-and-push
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
       - name: Copy config file via SSH
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.HOST }}
-	  username: ${{ secrets.SSH_USERNAME }}
-	  key: ${{ secrets.SSH_KEY }}
-	  source: "docker-compose.yml" # Что копируем
-	  target: "finance-bot"        # Куда (папка на сервере)
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "docker-compose.yml"
+          target: "finance-bot"
+
+      - name: Deploy to Hetzner
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd finance-bot
+            docker pull ${{ secrets.DOCKER_USERNAME }}/finance-bot:latest
+            docker compose up -d
+            docker image prune -f
+
       # 4. Подключаемся к серверу по SSH и обновляем
       - name: Deploy to Hetzner
         uses: appleboy/ssh-action@master
