@@ -52,6 +52,6 @@ jobs:
             
             # ДАВАЙ СДЕЛАЕМ ПРОСТО: Pull и Up
             docker pull ${{ secrets.DOCKER_USERNAME }}/finance-bot:latest
-            docker compose up -d bot
+            docker compose up -d
             # Чистим мусор (старые образы)
             docker image prune -f

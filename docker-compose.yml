@@ -30,5 +30,17 @@ services:
     volumes:
       - ./config:/app/config
 
+  grafana:
+    image: grafana/grafana-oss:latest
+    restart: always
+    container_name: finance_grafana
+    network_mode: "host"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin # Поменяем при входе
+    volumes:
+      - grafana_data:/var/lib/grafana
+
 volumes:
   postgres_data:
+  grafana_data: # Не забудь добавить этот volume!
