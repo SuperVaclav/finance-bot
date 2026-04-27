@@ -5,6 +5,9 @@ on:
   push:
     branches: [ "main" ]
 
+env:
+  IMAGE_REPO: ${{ secrets.DOCKER_USERNAME }}/finance-bot
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -12,6 +15,9 @@ jobs:
       # 1. Скачиваем код репозитория
       - name: Checkout code
         uses: actions/checkout@v3
+
+      - name: Set image tag
+        run: echo "IMAGE_TAG=sha-${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       # 2. Логинимся в Docker Hub
       - name: Login to Docker Hub
@@ -26,7 +32,9 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/finance-bot:latest
+          tags: |
+            ${{ env.IMAGE_REPO }}:latest
+            ${{ env.IMAGE_REPO }}:${{ env.IMAGE_TAG }}
 
   deploy:
     needs: build-and-push
@@ -34,6 +42,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
+      - name: Set image tag
+        run: echo "IMAGE_TAG=sha-${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       - name: Copy config file via SSH
         uses: appleboy/scp-action@master
@@ -50,8 +61,59 @@ jobs:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_KEY }}
+          envs: IMAGE_REPO,IMAGE_TAG
           script: |
+            set -e
             cd finance-bot
-            docker pull ${{ secrets.DOCKER_USERNAME }}/finance-bot:latest
-            docker compose up -d
+
+            if [ -f .deploy.env ]; then
+              cp .deploy.env .previous.env
+            fi
+
+            printf "IMAGE_REPO=%s\nIMAGE_TAG=%s\n" "$IMAGE_REPO" "$IMAGE_TAG" > .deploy.env
+
+            docker pull "${IMAGE_REPO}:${IMAGE_TAG}"
+            docker compose --env-file .deploy.env up -d
+
+            smoke_check() {
+              attempt=1
+              while [ "$attempt" -le 6 ]; do
+                status="$(docker inspect -f '{{.State.Status}}' finance_bot 2>/dev/null || echo missing)"
+                restarts="$(docker inspect -f '{{.RestartCount}}' finance_bot 2>/dev/null || echo -1)"
+
+                if [ "$status" = "running" ] && [ "$restarts" = "0" ]; then
+                  echo "Smoke check passed: finance_bot is running without restarts."
+                  return 0
+                fi
+
+                echo "Smoke check attempt ${attempt}/6 failed: status=${status}, restarts=${restarts}"
+                sleep 5
+                attempt=$((attempt + 1))
+              done
+
+              return 1
+            }
+
+            if smoke_check; then
+              docker compose --env-file .deploy.env ps
+              docker image prune -f
+              exit 0
+            fi
+
+            echo "Smoke check failed for ${IMAGE_REPO}:${IMAGE_TAG}"
+            docker logs --tail=50 finance_bot || true
+
+            if [ -f .previous.env ]; then
+              echo "Rolling back to previous deployment"
+              cp .previous.env .deploy.env
+              . ./.deploy.env
+              docker pull "${IMAGE_REPO}:${IMAGE_TAG}" || true
+              docker compose --env-file .deploy.env up -d
+              docker compose --env-file .deploy.env ps || true
+              docker logs --tail=50 finance_bot || true
+            else
+              echo "No previous deployment metadata found; cannot auto-rollback."
+            fi
+
             docker image prune -f
+            exit 1

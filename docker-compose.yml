@@ -13,7 +13,7 @@ services:
       - "127.0.0.1:5432:5432"
 
   bot:
-    image: supervaclav/finance-bot:latest
+    image: ${IMAGE_REPO:-supervaclav/finance-bot}:${IMAGE_TAG:-latest}
     restart: always
     container_name: finance_bot
     depends_on:
